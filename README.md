@@ -31,44 +31,49 @@ The dashboard revealed that **Month-to-Month customers on premium Fiber Optic pl
 
 ---
 
-## 🤖 Phase 2: Predictive Modeling (Machine Learning)
+## 🤖 Phase 2: Feature Engineering & Data Preprocessing
 
-Instead of offering blanket discounts to all Month-to-Month customers (which would severely hurt revenue), I developed a Machine Learning model to identify the specific customers with the highest probability of leaving.
+To give the Machine Learning algorithms the best possible chance of finding hidden patterns, I enriched the raw dataset:
 
-### Data Preprocessing
+- **Feature Engineering:** Created an `Extra_Charges_Fee` column by calculating `TotalCharges - (MonthlyCharges * Tenure)`. A high discrepancy here flags customers who are being hit with hidden fees — a strong psychological driver for churn.
+- **Categorical Encoding:** Applied One-Hot Encoding (`pd.get_dummies()`) to convert text-based categories into machine-readable binary formats.
 
-- Handled hidden missing values in `TotalCharges`.
-- Applied One-Hot Encoding to categorical variables using `pd.get_dummies()`.
-- Mapped target variable (`Churn`) to binary integer format.
+---
+## ⚖️ Phase 3: Advanced Machine Learning & SMOTE
 
-### Model Selection & Hyperparameter Tuning
+### The Imbalance Problem
 
-I trained and evaluated two advanced tree-based algorithms, utilizing `GridSearchCV` to specifically optimize for **Recall**. In a churn scenario, False Negatives (missing a churner) cost the business significantly more than False Positives (offering a small discount to a loyal customer).
+Because only 26% of customers churn, standard models get "lazy" and just predict that everyone will stay — resulting in high accuracy but terrible business value (missing the actual churners).
 
-**1. Tuned Random Forest Classifier**
+### The Solution
 
-- Hyperparameters: `class_weight='balanced'`, `max_depth=10`
-- **Recall (Churners): 81%**
-- Overall Accuracy: 77%
+- **SMOTE (Synthetic Minority Over-sampling Technique):** I utilized SMOTE to generate synthetic, mathematically accurate "churners" in the training data, forcing the algorithm to learn on a perfectly balanced 50/50 dataset.
+- **XGBoost & GridSearchCV:** I trained an Extreme Gradient Boosting (XGBoost) classifier, explicitly optimizing for the **F1-Score** to find the mathematical middle ground between Precision (not guessing randomly) and Recall (catching the churners).
 
-**2. Tuned XGBoost (Extreme Gradient Boosting)**
+**Initial Tuned Result:** The model achieved an Overall Accuracy of **78.8%**, but Recall (ability to catch churners) sat at **68.6%**.
 
-- Hyperparameters: `learning_rate=0.01`, `max_depth=3`, `scale_pos_weight=2.77`
-- **Recall (Churners): 87%**
-- Overall Accuracy: 74%
+---
+## 🎯 Phase 4: Business Value via Custom Threshold Tuning
 
-| Model | Recall (Churners) | Accuracy |
-|---|---|---|
-| Tuned Random Forest | 81% | 77% |
-| Tuned XGBoost | **87%** | 74% |
+The hardest truth in Machine Learning is the **Precision-Recall Trade-off**: you cannot force both numbers to go up simultaneously.
+
+Instead of retraining the model, I extracted the raw prediction probabilities (`predict_proba`) and tested **Custom Classification Thresholds**. By default, algorithms use a rigid 50% confidence threshold to flag a churner. By manually lowering this threshold, I created a "volume knob" for business stakeholders to choose their strategy based on retention budgets:
+
+| Strategy | Threshold | Overall Accuracy | Recall (Caught Churners) | Precision |
+|---|---|---|---|---|
+| **Aggressive** | 30% | 69.5% | **86.6%** | 46.0% |
+| **Balanced** | 40% | 75.4% | 78.3% | 52.3% |
+| **Conservative** | 50% | **78.8%** | 68.6% | **58.5%** |
 
 ---
 
-## 💡 Business Recommendation & Deployment Strategy
 
-The XGBoost model achieved **87% recall**, successfully identifying the vast majority of flight-risk customers.
+## 🚀 Final Deployment Recommendations
 
-### Actionable Steps
+As a Data Scientist, my goal is to give business leaders actionable levers to maximize revenue:
 
-1. **Low-Cost Interventions:** For low-cost retention strategies (e.g., automated check-in emails, feature awareness campaigns), deploy the **XGBoost model** to cast the widest net possible.
-2. **High-Cost Interventions:** If the retention strategy involves high-value financial discounts, fall back to the **Random Forest model**, which balances a highly respectable 81% recall with slightly better precision, minimizing unnecessary revenue loss on False Positives.
+1. **The Aggressive Strategy (Threshold 0.30):** If our retention campaign is very cheap (like an automated email), we lower the threshold to 30%. We catch a massive **86.6%** of all leaving customers. We accept the lower accuracy because accidentally emailing a loyal customer costs us nothing.
+
+2. **The Balanced Strategy (Threshold 0.40):** The sweet spot. If we are offering a moderate $10 discount, we capture an excellent **78.3%** of churners while keeping accuracy highly respectable at 75%.
+
+3. **The Conservative Strategy (Threshold 0.50+):** If we are giving away expensive hardware or huge cash discounts, we only want to target people we are absolutely sure are leaving — protecting our profit margins.
