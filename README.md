@@ -1,20 +1,21 @@
-# 📉 Telco Customer Churn Analytics & Predictive Modeling
+# 📉 IBM Telco Customer Churn Analytics & Predictive Modeling
 
 **Live Interactive Dashboard:** https://datastudio.google.com/reporting/9ae07afb-ac11-47a2-a8d6-883405650370
-
 ---
 
 ## 📌 Project Overview
 
-This end-to-end project investigates why a telecommunications company is losing customers (Churn) and builds a predictive Machine Learning pipeline to identify high-risk customers **before** they leave.
+This end-to-end project investigates why a telecommunications company is losing customers and builds an advanced Machine Learning pipeline to identify high-risk customers, using the standard IBM Telco dataset.
 
-**Tools Used:** Python (Pandas, Scikit-Learn, XGBoost), SQL (MySQL), Google Looker Studio, Machine Learning (Random Forest, Gradient Boosting).
+More importantly, it translates standard machine learning metrics into direct business value — optimizing the model to maximize expected profit from retention campaigns rather than simply chasing accuracy.
+
+**Tools Used:** Python (Pandas, Scikit-Learn, XGBoost, SHAP), SQL (MySQL), Google Looker Studio.
 
 ---
 
-## 📊 Phase 1: KPI Extraction & Root Cause Analysis (SQL + Looker Studio)
+## 📊 Phase 1: KPI Extraction & Business Impact (SQL + Looker)
 
-Using MySQL, I processed over **7,000 customer records** to extract core business metrics.
+Using MySQL, I processed over 7,000 customer records to extract core business metrics.
 
 ### Business Impact
 
@@ -23,57 +24,123 @@ Using MySQL, I processed over **7,000 customer records** to extract core busines
 | Overall Churn Rate | **26.54%** |
 | Monthly Revenue at Risk | **₹139,130** |
 
-I connected the aggregated SQL views to Google Looker Studio to build an interactive dashboard and identify the root cause.
-
-### Root Cause Insight
-
-The dashboard revealed that **Month-to-Month customers on premium Fiber Optic plans account for the vast majority of churn.** Because Fiber Optic is a premium service, customers refusing to sign 1-year contracts are highly price-sensitive and likely jumping to competitors after introductory promos expire.
+The interactive Looker Studio dashboard revealed that **Month-to-Month customers on premium Fiber Optic plans account for the vast majority of churn.**
 
 ---
 
-## 🤖 Phase 2: Feature Engineering & Data Preprocessing
+## 🤖 Phase 2: Feature Engineering & The "Honest Data Scientist" Pivot
 
-To give the Machine Learning algorithms the best possible chance of finding hidden patterns, I enriched the raw dataset:
+To give the ML algorithms the best possible chance of finding hidden patterns, I engineered new features, including:
 
-- **Feature Engineering:** Created an `Extra_Charges_Fee` column by calculating `TotalCharges - (MonthlyCharges * Tenure)`. A high discrepancy here flags customers who are being hit with hidden fees — a strong psychological driver for churn.
-- **Categorical Encoding:** Applied One-Hot Encoding (`pd.get_dummies()`) to convert text-based categories into machine-readable binary formats.
+- **`Extra_Charges_Fee`:** Calculated as `TotalCharges - (MonthlyCharges * Tenure)`. My initial hypothesis was that hidden fees were driving customers away.
 
----
-## ⚖️ Phase 3: Advanced Machine Learning & SMOTE
+### The SHAP Pivot
 
-### The Imbalance Problem
+After training the model, I used SHAP (SHapley Additive exPlanations) values to look inside the black box. **The SHAP summary plot objectively proved my initial hypothesis wrong** — `Extra_Charges_Fee` barely registered as a churn driver.
 
-Because only 26% of customers churn, standard models get "lazy" and just predict that everyone will stay — resulting in high accuracy but terrible business value (missing the actual churners).
+Instead of hiding this, I let the data dictate the strategy and dropped the engineered feature. The SHAP plot revealed the true root causes of churn:
 
-### The Solution
-
-- **SMOTE (Synthetic Minority Over-sampling Technique):** I utilized SMOTE to generate synthetic, mathematically accurate "churners" in the training data, forcing the algorithm to learn on a perfectly balanced 50/50 dataset.
-- **XGBoost & GridSearchCV:** I trained an Extreme Gradient Boosting (XGBoost) classifier, explicitly optimizing for the **F1-Score** to find the mathematical middle ground between Precision (not guessing randomly) and Recall (catching the churners).
-
-**Initial Tuned Result:** The model achieved an Overall Accuracy of **78.8%**, but Recall (ability to catch churners) sat at **68.6%**.
-
----
-## 🎯 Phase 4: Business Value via Custom Threshold Tuning
-
-The hardest truth in Machine Learning is the **Precision-Recall Trade-off**: you cannot force both numbers to go up simultaneously.
-
-Instead of retraining the model, I extracted the raw prediction probabilities (`predict_proba`) and tested **Custom Classification Thresholds**. By default, algorithms use a rigid 50% confidence threshold to flag a churner. By manually lowering this threshold, I created a "volume knob" for business stakeholders to choose their strategy based on retention budgets:
-
-| Strategy | Threshold | Overall Accuracy | Recall (Caught Churners) | Precision |
-|---|---|---|---|---|
-| **Aggressive** | 30% | 69.5% | **86.6%** | 46.0% |
-| **Balanced** | 40% | 75.4% | 78.3% | 52.3% |
-| **Conservative** | 50% | **78.8%** | 68.6% | **58.5%** |
+- **Fiber Optic:** Having a Fiber Optic plan massively increases churn probability.
+- **Monthly Charges:** The base price of the plans is the true friction point, not hidden fees.
+- **Tenure:** Customers are highly likely to abandon the service early in their lifecycle.
 
 ---
 
+## ⚖️ Phase 3: Model Selection & The SMOTE Ablation
 
-## 🚀 Final Deployment Recommendations
+I benchmarked progressively more complex approaches rather than reaching straight for gradient boosting.
 
-As a Data Scientist, my goal is to give business leaders actionable levers to maximize revenue:
+| Model | ROC-AUC | PR-AUC |
+|---|---|---|
+| Random Forest (baseline) | 0.76 | — |
+| Logistic Regression | 0.84 | — |
+| **XGBoost (no resampling)** | **0.86** | — |
+| XGBoost + SMOTE | 0.80 | — |
 
-1. **The Aggressive Strategy (Threshold 0.30):** If our retention campaign is very cheap (like an automated email), we lower the threshold to 30%. We catch a massive **86.6%** of all leaving customers. We accept the lower accuracy because accidentally emailing a loyal customer costs us nothing.
+**The Logistic Regression Baseline:** A plain logistic regression reached ROC-AUC 0.84 — within two points of the tuned ensemble. Establishing this first prevents mistaking model complexity for model value.
 
-2. **The Balanced Strategy (Threshold 0.40):** The sweet spot. If we are offering a moderate $10 discount, we capture an excellent **78.3%** of churners while keeping accuracy highly respectable at 75%.
+**The SMOTE Ablation:** I initially introduced SMOTE to balance the classes, using `imblearn.pipeline` so synthetic samples are generated only inside the training folds during cross-validation, keeping validation folds uncontaminated.
 
-3. **The Conservative Strategy (Threshold 0.50+):** If we are giving away expensive hardware or huge cash discounts, we only want to target people we are absolutely sure are leaving — protecting our profit margins.
+The ablation showed SMOTE **degraded ranking quality: XGBoost fell from 0.86 to 0.80 ROC-AUC.** The likely cause is that standard SMOTE interpolates linearly across one-hot encoded categorical features, manufacturing impossible customer profiles (e.g. `Contract_Month-to-month = 0.37`).
+
+I tried SMOTE, measured it, and removed it. The final champion is a non-resampled XGBoost model at **ROC-AUC 0.86**, with class imbalance handled at the decision threshold instead — see Phase 4.
+
+---
+
+## 🎯 Phase 4: Expected Value & Profit Optimization
+
+A standard model uses a rigid 50% confidence threshold. A deployable solution derives its threshold from business costs.
+
+*(Note: the ₹2,000 LTV is illustrative; this framework accepts real finance numbers directly.)*
+
+### Business Assumptions
+
+| Parameter | Value |
+|---|---|
+| Margin Saved (successful retention) | ₹2,000 |
+| Retention Success Rate | 30% |
+| **Expected value per True Positive** | **₹600** |
+| Cost of Offer (per customer contacted) | ₹200 |
+
+### The Profit Equation
+
+A false negative is **not** a model cost. If we do nothing, that customer churns and we lose them anyway — that is the baseline, not a penalty the model introduces. Profit must be measured *relative to doing nothing*. We pay ₹200 for everyone we contact, but earn ₹600 only on true positives.
+
+```
+Expected Profit = TP × ₹600 − (TP + FP) × ₹200
+```
+
+### Deriving the Optimal Threshold
+
+The decision is made per customer, not in aggregate. Contacting a customer with predicted churn probability `p` is profitable when:
+
+```
+p × ₹600 − ₹200 > 0    →    p > 1/3
+```
+
+**The optimal threshold is therefore 0.333 — it equals the cost ratio ₹200 / ₹600.** No sweep is strictly required; the sweep confirms it.
+
+---
+
+## 🚀 Final Deployment Recommendation
+
+Sweeping thresholds from 0.05 to 0.95 produces a genuine interior maximum at **0.32**, matching the analytically derived 0.333. That agreement is itself a useful result: it indicates the model's predicted probabilities are **well calibrated**, so they can be read as genuine probabilities rather than arbitrary confidence scores.
+
+At this threshold, precision is 46%. Per 1,000 customers flagged:
+
+```
+460 true positives  × ₹600  =  ₹276,000
+1,000 contacted     × ₹200  =  ₹200,000
+                    Net profit  =  ₹76,000
+```
+
+The 540 false alarms look wasteful in isolation, but each costs only ₹200 while each catch returns ₹600 — so the wider net is comfortably profitable. **Total expected campaign profit on the held-out test set: ₹[INSERT ACTUAL FIGURE].**
+
+**Sensitivity:** because the threshold equals the cost ratio, it moves predictably with business inputs. A cheaper ₹50 offer pushes the optimum to 0.083 (cast a far wider net); an expensive ₹400 offer pushes it to 0.667 (target only near-certain churners). The framework adapts without retraining.
+
+---
+
+## 🔮 Next Steps: Maturity & Uplift Modeling
+
+This model maximizes profit based on *likelihood of churn*, assuming a flat 30% retention success rate across all customers. The honest next step is **Uplift Modeling**.
+
+Discounting high-risk customers who are determined to leave regardless of any offer is pure financial loss. Future iterations will target **persuadable** customers rather than merely likely churners — modeling the *incremental effect* of the intervention instead of the probability of the outcome.
+
+---
+
+## 🛠️ Reproducibility & Setup
+
+- **Dataset:** IBM Telco Customer Churn (7,043 records)
+- **Seed:** `random_state=42` across all splits and algorithms
+- **Data Split:** 80/20 stratified train/test
+- **Environment:** `pip install -r requirements.txt`
+
+```
+project-root/
+├── requirements.txt
+├── notebooks/
+│   ├── 01_eda_and_sql_queries.ipynb
+│   └── 02_xgboost_and_expected_value.ipynb
+├── sql/
+└── images/
+```
